@@ -1,27 +1,26 @@
 [package]
 name = "nt"
-version = "1.0.3"
+version = "2.1.1"
 authors = ["Redrield <redrield@gmail.com>"]
 description = "A NetworkTables revision 3 library for Rust"
 license = "MIT"
-repository = "https://gitlab.com/Redrield/nt-rs"
+repository = "https://github.com/first-rust-competition/nt-rs"
 edition = "2018"
 
 [dependencies]
 tokio = { version = "0.2", features = ["full"] }
 bytes = "0.5.3"
 failure = "0.1.5"
-nt-network = { path = "./nt-network" }
+nt-network = "2.1.0"
 multimap = "0.5.0"
 nt-leb128 = "0.3.0"
 futures-channel = "0.3"
 futures-util = { version = "0.3", features = ["sink"] }
 tokio-util = { version = "0.2", features = ["codec"] }
 url = { version = "2.1.0", optional = true }
-tokio-tungstenite = { git = "https://github.com/dbcfd/tokio-tungstenite", branch = "tokio2", optional = true, features = ["stream"] }
-http = { version = "0.1.21", optional = true }
+tokio-tungstenite = { version = "0.10.0", optional = true, features = ["stream"] }
 
 [features]
 default = []
-websocket = ["tokio-tungstenite", "url", "http"]
+websocket = ["tokio-tungstenite", "url"]
 

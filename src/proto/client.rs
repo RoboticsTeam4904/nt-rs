@@ -15,10 +15,12 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use tokio::runtime::Runtime;
+use crate::error::Error;
 
 pub(crate) mod conn;
 
 pub struct ClientState {
+    pub(crate) connected: bool,
     ip: String,
     name: String,
     entries: HashMap<u16, EntryData>,
@@ -36,6 +38,7 @@ impl ClientState {
         let (ready_tx, mut ready_rx) = unbounded::<()>();
 
         let state = Arc::new(Mutex::new(ClientState {
+            connected: false,
             ip,
             name,
             entries: HashMap::new(),
@@ -63,11 +66,12 @@ impl ClientState {
         url: String,
         name: String,
         close_rx: Receiver<()>,
-    ) -> Arc<Mutex<ClientState>> {
+    ) -> crate::Result<Arc<Mutex<ClientState>>> {
         let (packet_tx, packet_rx) = unbounded::<Box<dyn Packet>>();
         let (ready_tx, mut ready_rx) = unbounded::<()>();
 
         let state = Arc::new(Mutex::new(ClientState {
+            connected: false,
             ip: url,
             name,
             entries: HashMap::new(),
@@ -86,8 +90,10 @@ impl ClientState {
             let _ = rt.block_on(conn::connection_ws(rt_state, packet_rx, ready_tx, close_rx));
         });
 
-        ready_rx.next().await;
-        state
+        if let None = ready_rx.next().await {
+            return Err(Error::ConnectionAborted);
+        }
+        Ok(state)
     }
 
     pub fn add_connection_callback(
@@ -124,7 +130,10 @@ impl State for ClientState {
         &mut self.entries
     }
 
-    fn create_entry(&mut self, data: EntryData) -> Receiver<u16> {
+    fn create_entry(&mut self, data: EntryData) -> crate::Result<Receiver<u16>> {
+        if !self.connected {
+            return Err(Error::BrokenPipe)
+        }
         let (tx, rx) = channel::<u16>(1);
         self.pending_entries.insert(data.name.clone(), tx);
         self.packet_tx
@@ -137,7 +146,7 @@ impl State for ClientState {
                 data.value,
             )))
             .unwrap();
-        rx
+        Ok(rx)
     }
 
     fn delete_entry(&mut self, id: u16) {
@@ -148,10 +157,11 @@ impl State for ClientState {
     fn update_entry(&mut self, id: u16, new_value: EntryValue) {
         if let Some(entry) = self.entries.get_mut(&id) {
             entry.value = new_value.clone();
+            entry.seqnum += 1;
             self.packet_tx
                 .unbounded_send(Box::new(EntryUpdate::new(
                     id,
-                    entry.seqnum + 1,
+                    entry.seqnum,
                     entry.entry_type(),
                     new_value,
                 )))
